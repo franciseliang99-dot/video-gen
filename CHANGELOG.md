@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.5 — 2026-04-27
+
+Out-of-band `scripts/health.py` CLI (skill itself untouched).
+
+- New `scripts/health.py` standalone CLI: `python3 scripts/health.py --version` (plain) / `--version --json` (health JSON aligned with director maintainer protocol).
+- Probes: `ffmpeg` + `ffprobe` (binary, critical), `Pillow` + `pydantic` (python, critical), Noto CJK font file (degraded if missing — Latin captions still work).
+- Exit codes: `0=healthy / 1=degraded / 2=broken / 3=protocol error`.
+- `VERSION` file 0.2.4 → 0.2.5 (patch bump, no skill / renderer changes).
+- The skill's `allowed-tools` is **not** modified — `health.py` is invoked by director directly via Bash, not through the skill orchestration.
+
+**Why** — director (V0.3.0+) introduced unified health-check across all 5 agents so `manifest.tool_versions` + `tool_health` are auto-populated. video-gen is a skill not a CLI; this `health.py` provides the CLI entry-point for director to query without going through the skill.
+
 ## 0.2.4 — 2026-04-26
 
 - Caption outline thickened from a hand-rolled 3px-radius offset loop to Pillow's built-in `stroke_width=5` + `stroke_fill=(0,0,0)`. Triggered by the V0.2.3 auto-eval flagging top-positioned captions as borderline-readable on bright sky in the user's `去过的远方` render. The new stroke is consistently legible on bright/cluttered backgrounds and the code is shorter (one `draw.text(..., stroke_width=5, stroke_fill=...)` call instead of an 8-direction offset loop).
