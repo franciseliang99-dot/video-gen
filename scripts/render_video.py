@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from _models import VideoPlan
+from _models import KenBurns, VideoPlan
 from title_card import render_scene
 
 
@@ -56,8 +56,78 @@ def _resolve_asset(ref: str, plan_dir: Path) -> Path:
     )
 
 
+def _kb_filter(kb: KenBurns, d_frames: int, w: int, h: int, fps: int) -> str:
+    if kb == "none":
+        return (
+            f"scale={w}:{h}:flags=lanczos,"
+            f"zoompan=z=1.0:d={d_frames}:s={w}x{h}:fps={fps}"
+        )
+
+    pre = f"scale={w * 4}:{h * 4}:flags=lanczos"
+    z_max = 1.15
+    z_inc = (z_max - 1.0) / max(d_frames - 1, 1)
+    last = max(d_frames - 1, 1)
+
+    if kb == "in":
+        z_expr = f"min(zoom+{z_inc:.6f},{z_max})"
+        x_expr = "iw/2-(iw/zoom/2)"
+        y_expr = "ih/2-(ih/zoom/2)"
+    elif kb == "out":
+        z_expr = f"if(eq(on,0),{z_max},max(zoom-{z_inc:.6f},1.0))"
+        x_expr = "iw/2-(iw/zoom/2)"
+        y_expr = "ih/2-(ih/zoom/2)"
+    elif kb == "left":
+        z_expr = "1.10"
+        x_expr = f"(iw-iw/zoom)*(1-on/{last})"
+        y_expr = "ih/2-(ih/zoom/2)"
+    else:
+        z_expr = "1.10"
+        x_expr = f"(iw-iw/zoom)*on/{last}"
+        y_expr = "ih/2-(ih/zoom/2)"
+
+    return (
+        f"{pre},"
+        f"zoompan=z='{z_expr}':d={d_frames}"
+        f":x='{x_expr}':y='{y_expr}':s={w}x{h}:fps={fps}"
+    )
+
+
+def _build_filter_complex(plan: VideoPlan) -> tuple[str, str]:
+    n = len(plan.scenes)
+    w, h = plan.resolution
+    fps = plan.fps
+    parts: list[str] = []
+
+    for i, sc in enumerate(plan.scenes):
+        d_frames = max(1, int(round(sc.duration_s * fps)))
+        kb = _kb_filter(sc.ken_burns, d_frames, w, h, fps)
+        parts.append(f"[{i}:v]{kb},setsar=1,format=yuv420p[v{i}]")
+
+    if n == 1:
+        return ";".join(parts), "[v0]"
+
+    if plan.transition == "cut":
+        concat = "".join(f"[v{i}]" for i in range(n))
+        parts.append(f"{concat}concat=n={n}:v=1:a=0[vout]")
+        return ";".join(parts), "[vout]"
+
+    xd = plan.transition_duration_s
+    cum = 0.0
+    prev = "[v0]"
+    for k in range(1, n):
+        cum += plan.scenes[k - 1].duration_s
+        offset = cum - k * xd
+        out_label = "[vout]" if k == n - 1 else f"[x{k:02d}]"
+        parts.append(
+            f"{prev}[v{k}]xfade=transition=fade"
+            f":duration={xd}:offset={offset:.4f}{out_label}"
+        )
+        prev = out_label
+    return ";".join(parts), "[vout]"
+
+
 def render(plan: VideoPlan, out_path: Path, plan_dir: Path) -> Path:
-    res = plan.resolution
+    w, h = plan.resolution
     with tempfile.TemporaryDirectory(prefix="video-gen-") as tmp:
         tmp_dir = Path(tmp)
         ffmpeg_inputs: list[str] = []
@@ -65,20 +135,15 @@ def render(plan: VideoPlan, out_path: Path, plan_dir: Path) -> Path:
             bg_path = _resolve_asset(scene.background_image, plan_dir)
             png = tmp_dir / f"scene_{i:03d}.png"
             render_scene(
-                bg_path, scene.caption, scene.caption_position, res, png,
+                bg_path, scene.caption, scene.caption_position, (w, h), png,
             )
-            ffmpeg_inputs += [
-                "-loop", "1", "-t", f"{scene.duration_s}", "-i", str(png),
-            ]
+            ffmpeg_inputs += ["-i", str(png)]
 
-        n = len(plan.scenes)
-        concat = "".join(f"[{i}:v]" for i in range(n))
-        filter_complex = f"{concat}concat=n={n}:v=1:a=0,format=yuv420p[v]"
-
+        filter_complex, final_label = _build_filter_complex(plan)
         cmd = [
             "ffmpeg", "-y", *ffmpeg_inputs,
             "-filter_complex", filter_complex,
-            "-map", "[v]",
+            "-map", final_label,
             "-r", str(plan.fps),
             "-c:v", "libx264",
             "-preset", "medium",

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0 — 2026-04-26
+
+Motion: single-image inputs are no longer static.
+
+- **Ken Burns per scene** — `Scene.ken_burns: Literal["none","in","out","left","right"]`, default `"in"`. Implemented via ffmpeg `zoompan` filter with 4× lanczos pre-scale (avoids the well-known integer-rounding stair-step artifact).
+- **Crossfade between scenes** — `VideoPlan.transition: Literal["cut","crossfade"]` (default `"crossfade"`) and `transition_duration_s: float` (default 0.5, range 0.1–2.0). Implemented via chained `xfade=fade:offset=…` filters.
+- **Filter graph builder extracted** — new `_build_filter_complex(plan) -> (filter_str, final_label)` in `render_video.py`; unit-testable without invoking ffmpeg.
+- **Validator**: `transition_duration_s` must be less than the shortest `duration_s` minus 0.1s.
+- **Smoke test** — `scripts/smoke_test.py` covers filter-string shape, cut mode, single-scene, validator rejection, and an end-to-end render + ffprobe duration check.
+- **Pipeline change** — per-scene ffmpeg input is now a single PNG frame (no `-loop 1 -t`); zoompan controls the per-scene output frame count. Old `-loop 1 -t` + concat would feed multi-frame input into zoompan and inflate output duration ~20×.
+- **Backwards compatibility** — V0.1 plans still parse and render; defaults yield a livelier output (mild zoom-in + crossfade) instead of the prior hard-cut static frames. To get V0.1's behavior, set `ken_burns: "none"` on every scene and `transition: "cut"`.
+- **Total visible duration** changes for crossfade plans: `sum(duration_s) - (N-1) * transition_duration_s` (was `sum(duration_s)` in V0.1).
+
 ## 0.1.1 — 2026-04-26
 
 - `render_video.py`: `--out` now defaults to `$VIDEO_GEN_OUT_DIR/<title-slug>.mp4` when the env var points to an existing directory; collision adds a `-YYYYMMDD-HHMMSS` suffix. Falls back to `./out.mp4` if the env var is unset; warns to stderr if it is set but the dir is missing. Explicit `--out` still wins.

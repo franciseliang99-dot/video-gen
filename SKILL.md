@@ -9,14 +9,18 @@ allowed-tools: Read Write Bash(python3 *) Bash(ls *) Bash(file *) Bash(ffprobe *
 
 You orchestrate a short MP4 from user inputs. **You** plan the video; bundled scripts render it. Do not try to generate video pixels yourself — only produce a structured `VideoPlan` JSON and hand it to the renderer script.
 
-## V0.1 capabilities
+## V0.2 capabilities
 
 **Supported inputs**
 - A text prompt describing the desired video
 - 1+ static image files (jpg / png / webp)
 - Aspect ratio: `16:9` (horizontal 1920×1080) or `9:16` (vertical 1080×1920). Default `16:9` if user does not specify.
 
-**Not supported in V0.1** — refuse and tell the user it is V0.2 work
+**Motion** (V0.2 — defaults make single-image inputs feel alive)
+- Per-scene Ken Burns zoom/pan: `in` (default subtle zoom-in), `out`, `left`, `right`, `none` (no motion).
+- Plan-level transition between scenes: `crossfade` (default, 0.5s) or `cut`.
+
+**Not supported yet** — refuse and tell user it is V0.3 work
 - Video clip inputs (mp4 / mov)
 - Audio narration / TTS
 - Background music
@@ -43,12 +47,15 @@ Produce a `VideoPlan` JSON conforming to this exact schema:
   "title": "string",
   "aspect": "16:9",
   "fps": 30,
+  "transition": "crossfade",
+  "transition_duration_s": 0.5,
   "scenes": [
     {
       "duration_s": 3.0,
       "background_image": "/abs/path/to/img.png",
       "caption": "短文字 or English",
-      "caption_position": "bottom"
+      "caption_position": "bottom",
+      "ken_burns": "in"
     }
   ]
 }
@@ -56,11 +63,14 @@ Produce a `VideoPlan` JSON conforming to this exact schema:
 
 Planning rules:
 - 3 scenes by default; up to 10 allowed.
-- Each `duration_s` between 1.5 and 6 seconds. Total video roughly 8–20 s.
+- Each `duration_s` between 1.5 and 6 seconds. Total visible video ≈ `sum(duration_s) - (N-1) * transition_duration_s` for crossfade, or `sum(duration_s)` for cut.
+- `transition_duration_s` must be < shortest `duration_s` minus 0.1s (validator enforces).
 - `caption` short (≤ 24 CJK chars / ≤ 50 Latin chars per intended line). Renderer wraps automatically but tighter is better.
 - If fewer images than scenes, cycle through them.
 - Pick `caption_position` (`top` / `center` / `bottom`) so the text does not cover the salient subject. Default `bottom`.
 - Captions should narrate or contextualize the prompt — not echo it verbatim. Build a small narrative arc (hook → body → close).
+- `ken_burns` per scene — vary across scenes so the video has rhythm. Good defaults when single-image input: scene 1 `in`, scene 2 `left` or `right`, scene 3 `out`. For motion-rich photos, prefer `none` so detail isn't lost. Omit the field to use default `in`.
+- `transition` plan-level — `crossfade` (default) for cinematic; `cut` for fast-paced or stop-motion feel. Omit to use default.
 
 ### 3. Save plan + render
 

@@ -45,18 +45,23 @@ python3 scripts/render_video.py examples/sample_plan.json --out out.mp4
   echo 'export VIDEO_GEN_OUT_DIR=/home/myclaw/mnt/francise-laptop/videogened' >> ~/.bashrc
   ```
 
-## V0.1 limits
+## V0.2 features
+
+- **Ken Burns** per scene (`in` / `out` / `left` / `right` / `none`, default `in`) — subtle zoom or pan so single-image input feels alive.
+- **Crossfade** between scenes (default 0.5s, configurable; or set `transition: "cut"` for hard cuts).
+
+## V0.1 limits (still in effect)
 
 - Image inputs only (no video clips yet)
 - No audio / TTS / background music
 - 1–10 scenes, total ~8–20 s
 - Aspect: `16:9` or `9:16`
 
-## V0.2 roadmap
+## V0.3 roadmap
 
 - Video clip ingestion (`ffprobe` for metadata, scale + pad to target res, trim segments)
-- Crossfade transitions between scenes
 - Optional TTS narration (provider TBD — `edge-tts` is a candidate for zero-cost)
+- Background music with auto-ducking against narration
 
 See `CHANGELOG.md`.
 
