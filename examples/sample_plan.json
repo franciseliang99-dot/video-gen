@@ -1,0 +1,25 @@
+{
+  "title": "Python Tutorial Intro",
+  "aspect": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "duration_s": 2.5,
+      "background_image": "sample_bg.png",
+      "caption": "Python in 10 seconds",
+      "caption_position": "bottom"
+    },
+    {
+      "duration_s": 3.0,
+      "background_image": "sample_bg.png",
+      "caption": "Readable. Batteries included.",
+      "caption_position": "center"
+    },
+    {
+      "duration_s": 2.5,
+      "background_image": "sample_bg.png",
+      "caption": "Let's build something.",
+      "caption_position": "bottom"
+    }
+  ]
+}
