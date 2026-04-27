@@ -92,10 +92,56 @@ The script prints the absolute output path on success.
 ### 4. Verify
 
 Run `ffprobe -v error -show_entries format=duration:stream=width,height -of default=nw=1 <out.mp4>`. Confirm:
-- `duration` ≈ sum of `duration_s` (within 0.2 s)
+- `duration` ≈ sum of `duration_s` (within 0.2 s; for crossfade plans the formula is `sum(duration_s) + N*tail_hold_s - (N-1)*transition_duration_s`)
 - `width × height` matches the chosen aspect (1920×1080 or 1080×1920)
 
 If either check fails, surface the discrepancy to the user — do not silently retry.
+
+### 5. Auto-evaluate (after Step 4 passes)
+
+After ffprobe verification succeeds, spawn a `general-purpose` subagent to critique the rendered video. Skip this step if:
+- The user said "just render", "no critique", "skip eval", or equivalent.
+- The render was kicked off via raw CLI (`render_video.py` directly) without Claude in the loop.
+- Step 4 already failed — fix that first.
+
+Default: run the eval.
+
+**Subagent prompt template** (substitute `<…>` with actual paths and values from the plan):
+
+> You are evaluating a rendered short video. Inputs:
+> - Video: `<abs out.mp4>`
+> - Plan JSON: `/tmp/video-gen-plan-${CLAUDE_SESSION_ID}.json`
+>
+> Extract 5–6 frames with `ffmpeg -ss <t> -i <video> -vframes 1 -y /tmp/eval-frame-<i>.png`. Pick timestamps at the **middle of each scene** and the **middle of each transition** (compute from `duration_s`, `transition_duration_s`, `tail_hold_s` in the plan — do not guess).
+>
+> Read the frames. Score the video on this rubric. Be terse. Total response under 200 words. Use exactly this markdown skeleton:
+>
+> ```
+> ## Caption legibility
+> <1–2 sentences: visible? overlap mid-transition? covering subject?>
+>
+> ## Motion
+> <1–2 sentences: Ken Burns direction per scene; do consecutive vectors clash?>
+>
+> ## Narrative arc
+> <1 sentence: does the caption sequence read coherently hook→body→close?>
+>
+> ## Technical sanity
+> <1 sentence: any visible encoding artifacts, banding, frozen frames, unexpected black flashes?>
+>
+> ## Verdict
+> One of: `ship` | `minor fixes` | `re-render`
+> If not `ship`: one concrete fix (e.g., "shorten scene 2 caption", "swap scene 3 ken_burns to `out`", "thicken caption outline for top-positioned text on bright sky").
+> ```
+>
+> Do not invent issues to look thorough. If a section is clean, say "clean." Cleanup: `rm -rf /tmp/eval-frame-*.png` after.
+
+**What to do with the verdict:**
+- **`ship`** → forward the critique verbatim to the user under an `### Auto-eval` heading. Done.
+- **`minor fixes`** → summarize the critique in 2–3 bullets, then **ask the user**: "Apply these fixes and re-render, or keep this as a draft?" Do not auto-re-render — the user may want the imperfect cut.
+- **`re-render`** → surface the critique prominently, name the concrete fix the eval suggested, then ask: "Re-render with `<fix>`? Or keep current output?" Still do not auto-re-render.
+
+**If the eval subagent itself fails** (timeout, ffmpeg error, malformed output) → tell the user "auto-eval failed: `<reason>`" and deliver the rendered video anyway. Eval failure must never block delivery of a successfully rendered + ffprobe-verified video.
 
 ## Error handling
 

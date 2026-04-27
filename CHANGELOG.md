@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.3 — 2026-04-26
+
+Workflow change (`SKILL.md` only — renderer untouched).
+
+- **Step 5: Auto-evaluate** added to `SKILL.md`. After ffprobe verification (Step 4) succeeds, Claude spawns a `general-purpose` subagent to critique the rendered video against a 4-axis rubric (caption legibility, motion, narrative arc, technical sanity) and return a `ship | minor fixes | re-render` verdict. Output format is fixed markdown so Claude can summarize.
+- Verdict-driven flow: `ship` forwards critique verbatim; `minor fixes` and `re-render` summarize and **ask user** whether to apply fixes (no auto-re-render — global rule "用户意图不明 → 必须问").
+- Skip conditions documented: user opt-out phrasing, raw-CLI invocation, Step 4 already failed.
+- Eval failure never blocks delivery of a successfully verified video.
+- Smoke test deliberately does **not** include the LLM eval — smoke must stay deterministic / offline / fast.
+
 ## 0.2.2 — 2026-04-26
 
 Smoother scene transitions for chroma-rich content.
