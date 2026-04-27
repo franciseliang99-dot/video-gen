@@ -48,7 +48,9 @@ Produce a `VideoPlan` JSON conforming to this exact schema:
   "aspect": "16:9",
   "fps": 30,
   "transition": "crossfade",
+  "transition_style": "fade",
   "transition_duration_s": 0.5,
+  "tail_hold_s": 0.3,
   "scenes": [
     {
       "duration_s": 3.0,
@@ -71,6 +73,9 @@ Planning rules:
 - Captions should narrate or contextualize the prompt — not echo it verbatim. Build a small narrative arc (hook → body → close).
 - `ken_burns` per scene — vary across scenes so the video has rhythm. Good defaults when single-image input: scene 1 `in`, scene 2 `left` or `right`, scene 3 `out`. For motion-rich photos, prefer `none` so detail isn't lost. Omit the field to use default `in`.
 - `transition` plan-level — `crossfade` (default) for cinematic; `cut` for fast-paced or stop-motion feel. Omit to use default.
+- `transition_style` (only when crossfade) — `fade` (default, plain alpha cross-blend), `fadeblack` (briefly through black, good for chroma-shifting scenes / travelogue chapter beats), `fadewhite` (through white, dreamy/airy), `dissolve` (pixel-noise blend, organic but caption-overlap during midpoint).
+- `tail_hold_s` plan-level (default 0.3, range 0–1) — clones each scene's last frame for this many seconds before the crossfade kicks in. Gives the eye a "rest frame" so motion + chroma shift + blend don't all happen at once. Set 0 to recover V0.2 behavior.
+- For chroma-shifting travelogue (e.g., tropical → grassland → autumn lake), prefer `transition_style: "fadeblack"` + `transition_duration_s: 1.0` + `tail_hold_s: 0.3`.
 
 ### 3. Save plan + render
 

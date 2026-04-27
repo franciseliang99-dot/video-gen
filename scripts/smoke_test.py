@@ -27,6 +27,7 @@ def test_filter_string_shape() -> None:
         "title": "shape",
         "aspect": "16:9", "fps": 30,
         "transition": "crossfade", "transition_duration_s": 0.5,
+        "tail_hold_s": 0.0,
         "scenes": [
             {"duration_s": 2.5, "background_image": "x.png", "ken_burns": "in"},
             {"duration_s": 3.0, "background_image": "x.png", "ken_burns": "left"},
@@ -39,6 +40,8 @@ def test_filter_string_shape() -> None:
     assert fc.count("xfade") == 2
     assert "offset=2.0000" in fc
     assert "offset=4.5000" in fc
+    assert "transition=fade" in fc
+    assert "tpad" not in fc
     print("ok: filter shape")
 
 
@@ -76,6 +79,7 @@ def test_validator_rejects_too_long_xfade() -> None:
     bad = {
         "title": "bad", "aspect": "16:9", "fps": 30,
         "transition": "crossfade", "transition_duration_s": 1.5,
+        "tail_hold_s": 0.0,
         "scenes": [
             {"duration_s": 1.5, "background_image": "x.png"},
             {"duration_s": 2.0, "background_image": "x.png"},
@@ -93,6 +97,7 @@ def test_render_and_ffprobe(bg_path: Path, out_path: Path) -> None:
     plan = VideoPlan.model_validate({
         "title": "render-smoke", "aspect": "16:9", "fps": 30,
         "transition": "crossfade", "transition_duration_s": 0.5,
+        "tail_hold_s": 0.0,
         "scenes": [
             {"duration_s": 2.0, "background_image": str(bg_path),
              "caption": "scene one", "caption_position": "top", "ken_burns": "in"},

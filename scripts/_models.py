@@ -8,6 +8,7 @@ CaptionPos = Literal["top", "center", "bottom"]
 Aspect = Literal["16:9", "9:16"]
 KenBurns = Literal["none", "in", "out", "left", "right"]
 Transition = Literal["cut", "crossfade"]
+TransitionStyle = Literal["fade", "fadeblack", "fadewhite", "dissolve"]
 
 ASPECT_TO_RES: dict[Aspect, tuple[int, int]] = {
     "16:9": (1920, 1080),
@@ -29,7 +30,9 @@ class VideoPlan(BaseModel):
     fps: int = Field(default=30, ge=15, le=60)
     scenes: list[Scene] = Field(min_length=1, max_length=10)
     transition: Transition = "crossfade"
+    transition_style: TransitionStyle = "fade"
     transition_duration_s: float = Field(default=0.5, ge=0.1, le=2.0)
+    tail_hold_s: float = Field(default=0.3, ge=0.0, le=1.0)
 
     @property
     def resolution(self) -> tuple[int, int]:
@@ -39,10 +42,12 @@ class VideoPlan(BaseModel):
     def _validate_transition_against_scene_durations(self) -> "VideoPlan":
         if self.transition == "crossfade" and len(self.scenes) > 1:
             min_scene = min(s.duration_s for s in self.scenes)
-            if self.transition_duration_s >= min_scene - 0.1:
+            effective = min_scene + self.tail_hold_s
+            if self.transition_duration_s >= effective - 0.1:
                 raise ValueError(
                     f"transition_duration_s ({self.transition_duration_s}) must be "
-                    f"less than the shortest scene minus 0.1s "
-                    f"(shortest = {min_scene}s)"
+                    f"less than the shortest scene + tail_hold_s minus 0.1s "
+                    f"(shortest scene = {min_scene}s, tail_hold = {self.tail_hold_s}s, "
+                    f"effective = {effective}s)"
                 )
         return self

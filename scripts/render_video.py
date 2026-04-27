@@ -114,10 +114,21 @@ def _build_filter_complex(plan: VideoPlan) -> tuple[str, str]:
     fps = plan.fps
     parts: list[str] = []
 
+    use_tpad = (
+        n > 1
+        and plan.transition == "crossfade"
+        and plan.tail_hold_s > 0
+    )
+
     for i, sc in enumerate(plan.scenes):
         d_frames = max(1, int(round(sc.duration_s * fps)))
         kb = _kb_filter(sc.ken_burns, d_frames, w, h, fps)
-        parts.append(f"[{i}:v]{kb},setsar=1,format=yuv420p[v{i}]")
+        chain = f"{kb},setsar=1,format=yuv420p"
+        if use_tpad:
+            chain += (
+                f",tpad=stop_duration={plan.tail_hold_s}:stop_mode=clone"
+            )
+        parts.append(f"[{i}:v]{chain}[v{i}]")
 
     if n == 1:
         return ";".join(parts), "[v0]"
@@ -128,14 +139,16 @@ def _build_filter_complex(plan: VideoPlan) -> tuple[str, str]:
         return ";".join(parts), "[vout]"
 
     xd = plan.transition_duration_s
+    style = plan.transition_style
+    h_extra = plan.tail_hold_s if use_tpad else 0.0
     cum = 0.0
     prev = "[v0]"
     for k in range(1, n):
-        cum += plan.scenes[k - 1].duration_s
+        cum += plan.scenes[k - 1].duration_s + h_extra
         offset = cum - k * xd
         out_label = "[vout]" if k == n - 1 else f"[x{k:02d}]"
         parts.append(
-            f"{prev}[v{k}]xfade=transition=fade"
+            f"{prev}[v{k}]xfade=transition={style}"
             f":duration={xd}:offset={offset:.4f}{out_label}"
         )
         prev = out_label

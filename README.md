@@ -49,6 +49,8 @@ python3 scripts/render_video.py examples/sample_plan.json --out out.mp4
 
 - **Ken Burns** per scene (`in` / `out` / `left` / `right` / `none`, default `in`) — subtle zoom or pan so single-image input feels alive.
 - **Crossfade** between scenes (default 0.5s, configurable; or set `transition: "cut"` for hard cuts).
+- **Transition style** — `fade` (default), `fadeblack` (through black, good for travelogue chapter beats), `fadewhite`, or `dissolve` (pixel-noise blend).
+- **Tail hold** — `tail_hold_s` (default 0.3s) clones each scene's last frame before the crossfade so motion + chroma shift + blend don't pile up. Set to 0 to disable.
 
 ## V0.1 limits (still in effect)
 

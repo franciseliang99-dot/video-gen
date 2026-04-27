@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.2 — 2026-04-26
+
+Smoother scene transitions for chroma-rich content.
+
+- **`transition_style`** (`VideoPlan.transition_style: Literal["fade","fadeblack","fadewhite","dissolve"]`, default `"fade"`) — pluggable xfade transition kind. `fadeblack` is recommended for travelogue / location-shifting plans where plain alpha blend creates a muddy mid-frame. `dissolve` (pixel-noise blend) is organic but causes caption overlap mid-transition; prefer `fadeblack`.
+- **`tail_hold_s`** (`VideoPlan.tail_hold_s: float`, default 0.3, range 0–1) — clones each scene's last frame for this many seconds, giving the eye a rest-frame between Ken Burns motion and the cross-fade. Implemented via `tpad=stop_duration=…:stop_mode=clone` appended to each per-scene chain when crossfading.
+- **xfade offset arithmetic updated** to account for the cloned tail: `cum += duration_s + tail_hold_s` per scene; total visible duration is now `sum(d) + N*tail_hold - (N-1)*xd` (was `sum(d) - (N-1)*xd`). Setting `tail_hold_s: 0` recovers V0.2.0 behavior.
+- **Validator update**: `transition_duration_s` must be `< (shortest scene + tail_hold_s) - 0.1`.
+- **Smoke test**: explicit `tail_hold_s: 0` in existing assertions to keep old expectations stable; the new `transition_style` is checked in the filter-shape test.
+
 ## 0.2.1 — 2026-04-26
 
 - Accept any image format ffmpeg can decode (AVIF, HEIC, etc.) — not just Pillow's native JPG/PNG/WebP. New `_normalize_for_pillow` helper in `render_video.py` tries Pillow first; on `UnidentifiedImageError`/`OSError` it transcodes to PNG via `ffmpeg -i src out.png` into the per-render temp dir, then hands the PNG to Pillow for caption compositing. Zero new pip deps; ffmpeg was already required.
