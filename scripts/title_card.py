@@ -70,17 +70,16 @@ def render_scene(
         else:
             y0 = resolution[1] - margin - block_h
 
-        outline_offsets = [
-            (-3, 0), (3, 0), (0, -3), (0, 3),
-            (-2, -2), (2, 2), (-2, 2), (2, -2),
-        ]
         for i, line in enumerate(lines):
             bbox = font.getbbox(line)
             line_w = bbox[2] - bbox[0]
             x = (resolution[0] - line_w) // 2
             y = y0 + i * line_h
-            for dx, dy in outline_offsets:
-                draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0))
-            draw.text((x, y), line, font=font, fill=(255, 255, 255))
+            draw.text(
+                (x, y), line, font=font,
+                fill=(255, 255, 255),
+                stroke_width=5,
+                stroke_fill=(0, 0, 0),
+            )
 
     frame.save(out_path, "PNG")

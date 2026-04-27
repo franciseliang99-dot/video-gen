@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4 — 2026-04-26
+
+- Caption outline thickened from a hand-rolled 3px-radius offset loop to Pillow's built-in `stroke_width=5` + `stroke_fill=(0,0,0)`. Triggered by the V0.2.3 auto-eval flagging top-positioned captions as borderline-readable on bright sky in the user's `去过的远方` render. The new stroke is consistently legible on bright/cluttered backgrounds and the code is shorter (one `draw.text(..., stroke_width=5, stroke_fill=...)` call instead of an 8-direction offset loop).
+
 ## 0.2.3 — 2026-04-26
 
 Workflow change (`SKILL.md` only — renderer untouched).
