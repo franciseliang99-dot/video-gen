@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import datetime
+import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -10,6 +13,32 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from _models import VideoPlan
 from title_card import render_scene
+
+
+def _slug(title: str) -> str:
+    cleaned = re.sub(r'[\\/:*?"<>|]', "", title).strip()
+    cleaned = re.sub(r"\s+", "-", cleaned)
+    return cleaned or "output"
+
+
+def _default_out_path(plan_title: str) -> Path:
+    env = os.environ.get("VIDEO_GEN_OUT_DIR")
+    if not env:
+        return Path("out.mp4")
+    out_dir = Path(env)
+    if not out_dir.is_dir():
+        print(
+            f"warning: VIDEO_GEN_OUT_DIR={env} is not a directory; "
+            "falling back to ./out.mp4",
+            file=sys.stderr,
+        )
+        return Path("out.mp4")
+    slug = _slug(plan_title)
+    candidate = out_dir / f"{slug}.mp4"
+    if candidate.exists():
+        ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        candidate = out_dir / f"{slug}-{ts}.mp4"
+    return candidate
 
 
 def _resolve_asset(ref: str, plan_dir: Path) -> Path:
@@ -65,14 +94,18 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Render a VideoPlan JSON into MP4")
     ap.add_argument("plan", type=Path, help="Path to VideoPlan JSON file")
     ap.add_argument(
-        "--out", type=Path, default=Path("out.mp4"),
-        help="Output MP4 path (default: ./out.mp4)",
+        "--out", type=Path, default=None,
+        help=(
+            "Output MP4 path. Default: $VIDEO_GEN_OUT_DIR/<title-slug>.mp4 "
+            "if the env var points to an existing directory, else ./out.mp4."
+        ),
     )
     args = ap.parse_args()
 
     plan_path: Path = args.plan.resolve()
     plan = VideoPlan.model_validate_json(plan_path.read_text(encoding="utf-8"))
-    out = render(plan, args.out.resolve(), plan_path.parent)
+    out_target = args.out if args.out is not None else _default_out_path(plan.title)
+    out = render(plan, out_target.resolve(), plan_path.parent)
     print(str(out))
     return 0
 

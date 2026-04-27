@@ -30,7 +30,7 @@ Extract from `$ARGUMENTS`:
 - The prompt text (free-form description)
 - `--images path1,path2,…` — comma-separated image paths
 - `--aspect 16:9|9:16` — default `16:9`
-- `--out path.mp4` — default `./out.mp4`
+- `--out path.mp4` — default: `$VIDEO_GEN_OUT_DIR/<title-slug>.mp4` if that env var points to an existing directory, else `./out.mp4`. If the user supplies `--out` explicitly, that wins.
 
 Resolve every image path to absolute. Verify each file exists with `ls` before planning. If any image is missing, stop and ask the user. If the user provided **no** images, stop and ask — V0.1 cannot synthesize visuals from text alone.
 

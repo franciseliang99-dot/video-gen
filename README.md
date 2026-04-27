@@ -38,6 +38,13 @@ You can also bypass Claude and render a hand-written plan directly:
 python3 scripts/render_video.py examples/sample_plan.json --out out.mp4
 ```
 
+## Configuration
+
+- `VIDEO_GEN_OUT_DIR` — if set to an existing directory, renders without an explicit `--out` go to `$VIDEO_GEN_OUT_DIR/<title-slug>.mp4`. Filename collision appends a `-YYYYMMDD-HHMMSS` suffix. Set persistently in your shell rc:
+  ```bash
+  echo 'export VIDEO_GEN_OUT_DIR=/home/myclaw/mnt/francise-laptop/videogened' >> ~/.bashrc
+  ```
+
 ## V0.1 limits
 
 - Image inputs only (no video clips yet)
