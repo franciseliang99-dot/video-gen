@@ -13,7 +13,7 @@ You orchestrate a short MP4 from user inputs. **You** plan the video; bundled sc
 
 **Supported inputs**
 - A text prompt describing the desired video
-- 1+ static image files (jpg / png / webp)
+- 1+ static image files — any format ffmpeg can decode (jpg / png / webp / avif / heic / …)
 - Aspect ratio: `16:9` (horizontal 1920×1080) or `9:16` (vertical 1080×1920). Default `16:9` if user does not specify.
 
 **Motion** (V0.2 — defaults make single-image inputs feel alive)

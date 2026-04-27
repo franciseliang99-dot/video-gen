@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 — 2026-04-26
+
+- Accept any image format ffmpeg can decode (AVIF, HEIC, etc.) — not just Pillow's native JPG/PNG/WebP. New `_normalize_for_pillow` helper in `render_video.py` tries Pillow first; on `UnidentifiedImageError`/`OSError` it transcodes to PNG via `ffmpeg -i src out.png` into the per-render temp dir, then hands the PNG to Pillow for caption compositing. Zero new pip deps; ffmpeg was already required.
+
 ## 0.2.0 — 2026-04-26
 
 Motion: single-image inputs are no longer static.

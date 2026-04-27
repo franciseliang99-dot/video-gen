@@ -11,8 +11,24 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from PIL import Image, UnidentifiedImageError
+
 from _models import KenBurns, VideoPlan
 from title_card import render_scene
+
+
+def _normalize_for_pillow(src: Path, tmp_dir: Path, idx: int) -> Path:
+    try:
+        with Image.open(src) as im:
+            im.verify()
+        return src
+    except (UnidentifiedImageError, OSError):
+        out = tmp_dir / f"normalized_{idx:03d}.png"
+        subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-i", str(src), str(out)],
+            check=True,
+        )
+        return out
 
 
 def _slug(title: str) -> str:
@@ -133,6 +149,7 @@ def render(plan: VideoPlan, out_path: Path, plan_dir: Path) -> Path:
         ffmpeg_inputs: list[str] = []
         for i, scene in enumerate(plan.scenes):
             bg_path = _resolve_asset(scene.background_image, plan_dir)
+            bg_path = _normalize_for_pillow(bg_path, tmp_dir, i)
             png = tmp_dir / f"scene_{i:03d}.png"
             render_scene(
                 bg_path, scene.caption, scene.caption_position, (w, h), png,
