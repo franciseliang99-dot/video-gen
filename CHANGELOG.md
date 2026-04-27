@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.0 — 2026-04-27
+
+**Narration audio support — single-pass mux**(was V0.4 work, pulled in due to director needing it; BGM remains in director).
+
+**Added**
+- `Scene.narration_path: str | None` field (pydantic) — optional per-scene audio file path (mp3 / wav / m4a — anything ffmpeg decodes).
+- `render_video.py --narration s1.mp3,s2.mp3,...` CLI flag — comma list, **count must equal scene count** (else `SystemExit`).
+- Resolution precedence: CLI `--narration` overrides plan's per-scene `narration_path` for **all** scenes (whole-list semantic, not per-position merge — keeps the contract simple). If plan has narration_path on **some** scenes but not all, renderer rejects (`SystemExit`).
+- `_build_filter_complex(plan, n_audio)` extended:
+  - When `n_audio > 0`, each narration is padded/trimmed via `aresample=async=1, apad=whole_dur=<ms>ms, atrim=duration=<s>` to the scene's **visual occupy duration** on the timeline (`d_i + tail - xd` for non-final scenes; `d_i + tail` for the final).
+  - Scenes are hard-concatenated (`concat n=N v=0 a=1`) — **no audio crossfade** (V0.3). Adjacent scenes are typically different sentences in the explainer use case; hard cut is clearer.
+  - Output mp4: `-c:v libx264 -c:a aac -b:a 192k`. **Not** `-shortest` (would truncate audio tail).
+- `SKILL.md` updated: V0.3 capabilities + V0.3 narration timing rule (`scene.duration_s ≥ narration_actual + ~0.2s buffer`, ffprobe to measure) + render call template + verify step adds audio-stream-codec check + error handling adds narration-mismatch / narration-too-long / narration-not-found cases.
+
+**Smoke results** — re-rendered the director's 9-scene earwax TikTok in a single `render_video.py` call: 44.20s mp4 with h264 + aac 192k, exactly matches the crossfade formula `sum(d) + N*tail - (N-1)*xd = 44.7 + 2.7 - 3.2 = 44.2s`. Director's previous two-step approach (V0.2 render + ffmpeg post-mux) was 43.90s — the 0.30s drift was encoder rounding when shortest-clipping. V0.3 single-pass is **more precise** AND **simpler downstream**.
+
+**Backward compatible (V0.2 ↔ V0.3)** — no `--narration` AND no plan `narration_path` → renders silent video exactly like V0.2 (verified: `ffprobe` shows only video stream, duration unchanged at 43.90s).
+
+**Why** — director was carrying narration-mux as a step-5 ffmpeg block (`ffmpeg -i video -i narration -c:v copy -c:a aac -shortest`), which (a) duplicated mp4 encoding overhead and (b) clipped video tail when narration was shorter. Moving it into video-gen single-pass eliminates both, and frees director step 5 to handle only BGM amix (which legitimately has cross-video failure-degradation logic that doesn't belong inside video-gen).
+
+**Out of scope (V0.4)** — audio crossfade between scenes; video clip inputs.
+
 ## 0.2.5 — 2026-04-27
 
 Out-of-band `scripts/health.py` CLI (skill itself untouched).

@@ -22,6 +22,7 @@ class Scene(BaseModel):
     caption: str | None = None
     caption_position: CaptionPos = "bottom"
     ken_burns: KenBurns = "in"
+    narration_path: str | None = None  # V0.3+: optional per-scene audio (mp3/wav)
 
 
 class VideoPlan(BaseModel):

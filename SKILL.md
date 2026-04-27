@@ -9,22 +9,23 @@ allowed-tools: Read Write Bash(python3 *) Bash(ls *) Bash(file *) Bash(ffprobe *
 
 You orchestrate a short MP4 from user inputs. **You** plan the video; bundled scripts render it. Do not try to generate video pixels yourself — only produce a structured `VideoPlan` JSON and hand it to the renderer script.
 
-## V0.2 capabilities
+## V0.3 capabilities
 
 **Supported inputs**
 - A text prompt describing the desired video
 - 1+ static image files — any format ffmpeg can decode (jpg / png / webp / avif / heic / …)
 - Aspect ratio: `16:9` (horizontal 1920×1080) or `9:16` (vertical 1080×1920). Default `16:9` if user does not specify.
+- **Narration audio (V0.3)** — 1 audio file per scene (mp3 / wav / m4a — anything ffmpeg can decode). Pass via `--narration s1.mp3,s2.mp3,...` (comma list, length must equal scenes) or per-scene `narration_path` in plan. Each clip is padded with silence (`apad`) or trimmed (`atrim`) to the scene's exact visual occupy duration; scenes are hard-concatenated (no audio crossfade — relevant for educational / explainer style where adjacent scenes are different sentences). Output mp4 is `h264 + aac 192k`.
 
-**Motion** (V0.2 — defaults make single-image inputs feel alive)
+**Motion**
 - Per-scene Ken Burns zoom/pan: `in` (default subtle zoom-in), `out`, `left`, `right`, `none` (no motion).
 - Plan-level transition between scenes: `crossfade` (default, 0.5s) or `cut`.
 
-**Not supported yet** — refuse and tell user it is V0.3 work
+**Not supported yet** — refuse and tell user it is V0.4+ work
 - Video clip inputs (mp4 / mov)
-- Audio narration / TTS
-- Background music
+- Background music (BGM is intentionally left to the orchestrating layer — director — because BGM failure-degradation logic is reused across multiple videos)
 - More than 10 scenes
+- Audio crossfade between scenes (only hard concat available in V0.3)
 
 ## Pipeline
 
@@ -35,8 +36,9 @@ Extract from `$ARGUMENTS`:
 - `--images path1,path2,…` — comma-separated image paths
 - `--aspect 16:9|9:16` — default `16:9`
 - `--out path.mp4` — default: `$VIDEO_GEN_OUT_DIR/<title-slug>.mp4` if that env var points to an existing directory, else `./out.mp4`. If the user supplies `--out` explicitly, that wins.
+- **`--narration s1.mp3,s2.mp3,...` (V0.3)** — comma-separated audio paths; **count MUST equal scene count** (renderer rejects mismatch). Or `--narration-dir <dir>` and you glob `scene_*.{mp3,wav,m4a}` sorted alphanumerically — translate to comma list before passing to `render_video.py`.
 
-Resolve every image path to absolute. Verify each file exists with `ls` before planning. If any image is missing, stop and ask the user. If the user provided **no** images, stop and ask — V0.1 cannot synthesize visuals from text alone.
+Resolve every image AND narration path to absolute. Verify each file exists with `ls` before planning. If any image or narration file is missing, stop and ask the user. If the user provided **no** images, stop and ask — V0.3 still cannot synthesize visuals from text alone.
 
 ### 2. Plan scenes
 
@@ -76,6 +78,7 @@ Planning rules:
 - `transition_style` (only when crossfade) — `fade` (default, plain alpha cross-blend), `fadeblack` (briefly through black, good for chroma-shifting scenes / travelogue chapter beats), `fadewhite` (through white, dreamy/airy), `dissolve` (pixel-noise blend, organic but caption-overlap during midpoint).
 - `tail_hold_s` plan-level (default 0.3, range 0–1) — clones each scene's last frame for this many seconds before the crossfade kicks in. Gives the eye a "rest frame" so motion + chroma shift + blend don't all happen at once. Set 0 to recover V0.2 behavior.
 - For chroma-shifting travelogue (e.g., tropical → grassland → autumn lake), prefer `transition_style: "fadeblack"` + `transition_duration_s: 1.0` + `tail_hold_s: 0.3`.
+- **V0.3 narration timing rule**: when `--narration` is supplied, the scene's `duration_s` must be `≥ narration_actual_seconds` (use `ffprobe -show_entries format=duration` on each narration file). Add ~0.2s buffer to give a brief end-of-line breath. The renderer pads silence if narration is shorter; if narration is **longer** than `duration_s`, audio is trimmed mid-word — surface this as an error and re-plan with longer scenes rather than ship a cut narration.
 
 ### 3. Save plan + render
 
@@ -84,18 +87,20 @@ Write the plan JSON to `/tmp/video-gen-plan-${CLAUDE_SESSION_ID}.json`, then run
 ```
 python3 ${CLAUDE_SKILL_DIR}/scripts/render_video.py \
   /tmp/video-gen-plan-${CLAUDE_SESSION_ID}.json \
-  --out <user-out-path>
+  --out <user-out-path> \
+  [--narration s1.mp3,s2.mp3,...]
 ```
 
-The script prints the absolute output path on success.
+The script prints the absolute output path on success. With `--narration`, output mp4 contains both video and aac audio; without, only video.
 
 ### 4. Verify
 
-Run `ffprobe -v error -show_entries format=duration:stream=width,height -of default=nw=1 <out.mp4>`. Confirm:
+Run `ffprobe -v error -show_entries format=duration:stream=index,codec_type,width,height -of default=nw=1 <out.mp4>`. Confirm:
 - `duration` ≈ sum of `duration_s` (within 0.2 s; for crossfade plans the formula is `sum(duration_s) + N*tail_hold_s - (N-1)*transition_duration_s`)
 - `width × height` matches the chosen aspect (1920×1080 or 1080×1920)
+- **(V0.3)** if narration was supplied, an `audio` stream with `codec_name=aac` is present; if not supplied, no audio stream
 
-If either check fails, surface the discrepancy to the user — do not silently retry.
+If any check fails, surface the discrepancy to the user — do not silently retry.
 
 ### 5. Auto-evaluate (after Step 4 passes)
 
@@ -146,9 +151,12 @@ Default: run the eval.
 ## Error handling
 
 - **Image not found** → stop, ask user for correct path. Do not fabricate a substitute.
+- **(V0.3) Narration file not found** → stop, ask user for correct path.
+- **(V0.3) `--narration` count ≠ scene count** → stop, the renderer raises `SystemExit` with the mismatch. Ask user whether to re-plan scene count or trim/extend narration list.
+- **(V0.3) Narration actual duration > `scene.duration_s`** → stop and re-plan; trimming mid-word ships a broken cut.
 - **ffmpeg failure** → show the last 20 lines of stderr to the user. Diagnose root cause; do not retry blindly.
 - **Plan validation fails** (`pydantic.ValidationError`) → show the errors, fix the plan, regenerate. Maximum 2 attempts.
-- **Non-V0.1 input** (video clip, audio file) → stop and explain it is V0.2 work.
+- **Non-V0.3 input** (video clip, BGM) → stop and explain it is V0.4+ work; BGM specifically is intentionally left to the orchestrator (director).
 
 ## Examples
 
