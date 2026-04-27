@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.3.1 — 2026-04-27
+
+**Doc-truth fix** — `tail_hold_s` Field range tightened from `0.0-1.0` (V0.2.x advertised) to `0.0-0.3` (empirically safe upper bound). SKILL.md updated to match. Surfaced by director's tokyo-editor pipeline using `tail_hold_s=1.0` and getting a 6.07s video stream instead of 59.8s.
+
+**Boundary** (measured this release, ffmpeg 6.x, single-image-per-scene, 9-scene 9:16 plan):
+- `tail_hold_s ≤ 0.3` → video duration matches formula `sum(d) + N*tail - (N-1)*xd` ✓
+- `tail_hold_s ≥ 0.4` → video stream plateaus at ~6s regardless of plan total; ffmpeg log shows `frame=129 ... drop=1700+`, classic filter-graph downstream-doesn't-consume / upstream-keeps-supplying deadlock.
+
+**Root cause** (Plan subagent diagnosed, confirmed by ffmpeg log inspection):
+- Each png input is a single-frame stream → EOFs after 1 frame.
+- `zoompan d=180` emits the per-scene 30fps×6s=180 frames from that one input frame.
+- `tpad=stop_duration=N:stop_mode=clone` then needs to clone the *zoompan output's last frame* for another `N*30` frames.
+- ffmpeg's internal frame-queue between filters appears bounded ~9 frames in this configuration. `tail_hold_s=0.3` → `0.3·30=9` clone frames just fits; `tail_hold_s ≥ 0.4` → `≥12` clone frames → overflow → deadlock.
+
+**Failed fix attempt (kept in branch history,  reverted before V0.3.1 cut)**: added `-loop 1 -t (scene.duration_s + tail_hold_s + 0.5)` per png input, hoping looped input would prevent tpad starvation. Plan subagent claimed `zoompan d=` would hard-cap output frame count. **Empirical reality**: zoompan `d=` is *per-input-frame* (each input frame produces `d` output frames), so a 7.5s loop at 30fps = 225 input frames → 225·180 = 40500 output frames per scene. Total tokyo 9-scene rendered to **1180.8s** with 35424 frames (42 MB) — exactly the V0.2.0 → V0.2.1 anti-pattern that history already warned about. Reverted, switched to truth-in-doc fix instead.
+
+**Other fixes attempted and rejected**:
+- `-thread_queue_size 4096` per input: no effect (the deadlock is inside filter-graph, not at input demuxer thread).
+- `loop` filter post-zoompan: would cache all frames in RAM (700+ MB for 9-scene 4K-internal pipeline), risky on small boxes; deferred.
+
+**Why this is the right fix despite being "just clamping the range"**:
+1. The `0.0-1.0` range was wishful from V0.2.x — only the default `0.3` was ever empirically validated (earwax video V0.2 ran at 0.3 for 43.9s OK).
+2. SKILL.md now matches reality, callers can plan against truth.
+3. The deeper ffmpeg fix (custom filter or framequeue knob) is non-portable across ffmpeg builds and would re-introduce machine-specific surprises.
+4. If a caller really needs longer tail (cinematic chapter beats), they can use `transition_style: "fadeblack"` + `transition_duration_s: 1.0` instead — already documented as the correct pattern for chroma-shifting beats.
+
+**Backwards compat**: V0.2 silent plans, V0.3 narration plans, plans with `tail_hold_s ≤ 0.3` all unaffected. Plans with `tail_hold_s > 0.3` now fail at pydantic validation with a clear error (was previously rendering a broken 6s clip silently — strict failure preferred).
+
+**Lesson into director maintainer.md §6.7** (待 director V0.4.2): **subagent ffmpeg / system-behavior推理实施前必须 single-step smoke verify root cause**. Plan subagent diagnosed framequeue overflow + recommended `-loop 1 -t`. Diagnosis was right (root cause = framequeue deadlock), but recommended fix conflicted with zoompan's per-input-frame multiplication semantics. A 30-second mock-run before full implementation would have caught it. This pattern parallels §6.1 (实测优先于推理 picture-gen 误判) — same lesson, different surface.
+
 ## 0.3.0 — 2026-04-27
 
 **Narration audio support — single-pass mux**(was V0.4 work, pulled in due to director needing it; BGM remains in director).

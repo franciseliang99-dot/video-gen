@@ -33,7 +33,14 @@ class VideoPlan(BaseModel):
     transition: Transition = "crossfade"
     transition_style: TransitionStyle = "fade"
     transition_duration_s: float = Field(default=0.5, ge=0.1, le=2.0)
-    tail_hold_s: float = Field(default=0.3, ge=0.0, le=1.0)
+    # V0.3.1: range tightened from 0.0-1.0 to 0.0-0.3. Higher values cause ffmpeg's
+    # tpad+zoompan+xfade chain to deadlock (output video stream plateaus at the
+    # duration of one scene regardless of plan total). Empirically reproduced on
+    # ffmpeg 6.x with both single-image-per-scene and 9-scene plans. The
+    # documented 1.0 upper bound from V0.2.x was a wishful spec — only 0.3 (the
+    # default) was ever validated. See CHANGELOG 0.3.1 for the failed -loop 1 -t
+    # workaround attempt.
+    tail_hold_s: float = Field(default=0.3, ge=0.0, le=0.3)
 
     @property
     def resolution(self) -> tuple[int, int]:
