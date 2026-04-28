@@ -2,6 +2,7 @@
 name = "video-gen"
 version = "0.2.4"
 description = "Claude Code skill: generate short MP4 videos from text + images. Claude directs, ffmpeg renders."
+license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.0",
