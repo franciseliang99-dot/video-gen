@@ -34,7 +34,7 @@ def test_filter_string_shape() -> None:
             {"duration_s": 2.5, "background_image": "x.png", "ken_burns": "out"},
         ],
     })
-    fc, final = _build_filter_complex(plan)
+    fc, final, _ = _build_filter_complex(plan)
     assert final == "[vout]"
     assert fc.count("zoompan") == 3
     assert fc.count("xfade") == 2
@@ -54,7 +54,7 @@ def test_cut_mode() -> None:
             {"duration_s": 1.0, "background_image": "x.png", "ken_burns": "none"},
         ],
     })
-    fc, final = _build_filter_complex(plan)
+    fc, final, _ = _build_filter_complex(plan)
     assert "concat=n=2" in fc
     assert "xfade" not in fc
     assert final == "[vout]"
@@ -68,7 +68,7 @@ def test_single_scene() -> None:
             {"duration_s": 2.0, "background_image": "x.png", "ken_burns": "in"},
         ],
     })
-    fc, final = _build_filter_complex(plan)
+    fc, final, _ = _build_filter_complex(plan)
     assert final == "[v0]"
     assert "xfade" not in fc
     assert "concat" not in fc

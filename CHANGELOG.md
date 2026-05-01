@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.3.2 — 2026-04-30
+
+**Caption wrap fix** — `_wrap_caption()` no longer breaks Latin words mid-letter (refs #1).
+
+**Bug** (5/5 director-pipeline outputs reproduced in issue body):
+- `STOP. You're doin\ng it wrong.` (broken: `doing`)
+- `Faster than a .22 b\nullet` (broken: `bullet`)
+- `1500 N - 2500x bo\ndy weight` (broken: `body`)
+- `The commute is h\ners` (broken: `hers`)
+- `Step 4: Backs of ha\nds` (broken: `hands`)
+
+**Root cause**: `scripts/title_card.py:_wrap_caption` accumulated one *char* at a time and broke whenever the trial bbox exceeded `max_width`, with zero whitespace lookahead. Worked for CJK (no spaces) but mangled every Latin caption that needed wrapping.
+
+**Fix**: word-level greedy fill via `text.split(" ")`. Tokens longer than `max_width` (CJK strings as one big token, or pathological ASCII like `supercalifragilistic...`) fall back to per-character wrapping — so CJK behavior is *byte-for-byte unchanged* (verified by `test_cjk_char_split_preserved`). Explicit `\n` continues to force a break.
+
+**Tests** — new `tests/test_wrap.py` (project's first proper test directory; `scripts/smoke_test.py` stays focused on render/ffprobe integration):
+- `test_latin_no_mid_word_break` — all 5 issue captions assert no fragment exists outside the original token set
+- `test_cjk_char_split_preserved` — `牙齿王国`, `把光留在水面` round-trip char-perfect
+- `test_explicit_newline_creates_break` — `Line1\nLine2` → `["Line1", "Line2"]`
+- `test_oversized_token_falls_back_to_char_split` — 34-char Latin word in 200px column wraps without char loss
+- `test_short_caption_single_line`, `test_empty_input_returns_empty` — boundary
+
+**Drive-by fix** — `scripts/smoke_test.py` had been broken since V0.3.0: three `fc, final = _build_filter_complex(plan)` sites unpacked 2 values from a function that returned 3-tuple `(filter, v_label, a_label)`. Updated to `fc, final, _ = _build_filter_complex(plan)`. Acceptance criterion "smoke test passes" was unreachable without this; flagged here rather than buried in a separate commit because it's load-bearing for issue #2's verification too.
+
+**Backwards compat** — Captions that previously rendered correctly (CJK, short Latin that fit on one line, captions that happened to break on a space-bordering character) all render bit-identically. The fix is purely additive on the wrap-overflow path.
+
 ## 0.3.1 — 2026-04-27
 
 **Doc-truth fix** — `tail_hold_s` Field range tightened from `0.0-1.0` (V0.2.x advertised) to `0.0-0.3` (empirically safe upper bound). SKILL.md updated to match. Surfaced by director's tokyo-editor pipeline using `tail_hold_s=1.0` and getting a 6.07s video stream instead of 59.8s.

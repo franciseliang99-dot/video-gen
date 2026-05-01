@@ -24,22 +24,49 @@ def _scale_and_crop(img: Image.Image, target: tuple[int, int]) -> Image.Image:
 
 
 def _wrap_caption(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
+    # Word-level greedy fill for whitespace-separated input (Latin); per-char
+    # fallback for tokens longer than max_width (CJK strings have no spaces and
+    # fall through naturally; long URLs / made-up words also degrade gracefully).
+    def width(s: str) -> int:
+        if not s:
+            return 0
+        bbox = font.getbbox(s)
+        return bbox[2] - bbox[0]
+
+    def char_split_into(s: str, lines_out: list[str], line: str) -> str:
+        for ch in s:
+            trial = line + ch
+            if width(trial) > max_width and line:
+                lines_out.append(line)
+                line = ch
+            else:
+                line = trial
+        return line
+
     lines: list[str] = []
-    cur = ""
-    for ch in text:
-        if ch == "\n":
-            lines.append(cur)
-            cur = ""
-            continue
-        trial = cur + ch
-        bbox = font.getbbox(trial)
-        if (bbox[2] - bbox[0]) > max_width and cur:
-            lines.append(cur)
-            cur = ch
-        else:
-            cur = trial
-    if cur:
-        lines.append(cur)
+    line = ""
+    paragraphs = text.split("\n")
+    for p_idx, paragraph in enumerate(paragraphs):
+        if p_idx > 0:
+            # Explicit \n: flush whatever is on the current line (even empty).
+            lines.append(line)
+            line = ""
+        for token in paragraph.split(" "):
+            if not token:
+                continue  # collapse repeated spaces
+            candidate = f"{line} {token}" if line else token
+            if width(candidate) <= max_width:
+                line = candidate
+            elif line:
+                lines.append(line)
+                if width(token) <= max_width:
+                    line = token
+                else:
+                    line = char_split_into(token, lines, "")
+            else:
+                line = char_split_into(token, lines, "")
+    if line:
+        lines.append(line)
     return lines
 
 
