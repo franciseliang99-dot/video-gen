@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.3.3 — 2026-04-30
+
+**Output loudness normalization** — rendered mp4 now lands at the TikTok / YouTube Shorts target of −14 LUFS (refs #2). Previously every director-pipeline output measured −25 to −27 LUFS, ~12 dB below target — platform normalization either lifted noise or de-prioritized the clip.
+
+**Bug** (issue #2 reproduction across 5 director outputs):
+
+| video | input_i (LUFS) | input_lra |
+|---|---:|---:|
+| earwax-remove | −26.41 | 3.60 |
+| kids-handwashing | −26.70 | 3.20 |
+| mantis-shrimp | −25.88 | 4.80 |
+| tokyo-editor | −26.15 | 6.10 |
+| toothbrush-monsters | −25.64 | **18.20** |
+
+**Root cause**: `scripts/render_video.py` ffmpeg call had no audio filter — narration mp3s were concatenated and re-encoded as-is. edge-tts narration is naturally quiet, BGM is whatever bgm-gen emits, no normalization happens at any stage of the V0.3 pipeline.
+
+**Fix**: single-pass `loudnorm=I=-14:LRA=11:TP=-1:print_format=summary` inlined into the filter_complex audio chain (NOT `-af`). The issue body suggested `-af`, but ffmpeg explicitly rejects mixing simple and complex filtering on the same stream:
+
+> `Filtergraph 'loudnorm=...' was specified for a stream fed from a complex filtergraph. Simple and complex filtering cannot be used together for the same stream.`
+
+So the loudnorm is appended onto the audio concat output inside `_build_filter_complex` (`scripts/render_video.py:184-194`).
+
+**LRA>15 stderr warn (not two-pass auto-upgrade)** — the toothbrush-monsters case (LRA=18.20) is segment-level imbalance (silent narration vs loud BGM interleaving), not stream-level dynamic range; two-pass loudnorm would linearly scale the whole stream and not address the per-segment unevenness — that's BGM-mix territory, which director owns. So the renderer parses `Input LRA:` from `print_format=summary` stderr after the run; if > 15 LU, emits one warning line recommending per-segment leveling upstream. Render time unaffected.
+
+**Smoke test** — new `test_loudnorm_integration` in `scripts/smoke_test.py` generates three quiet sine narrations (~ −30 dBFS, simulating edge-tts), renders, then re-measures via `loudnorm=I=-14:LRA=11:TP=-1:print_format=json` and asserts `input_i ∈ [−15, −13]`. Local run: **−14.22 LUFS** ✓.
+
+**Acceptance criterion clarification** — issue #2's literal acceptance command (`ffmpeg -i out.mp4 -af loudnorm=print_format=json -f null -`, no `I=`) reports `output_i` near −24 (loudnorm's *default* target), not −14. Independently confirmed: with default targets, `output_i = -24.08`, while the file's actual loudness shows up as `input_i = -14.22`. The smoke test reads `input_i` (the file's measured LUFS) — that's the correct field to verify the rendered output's loudness.
+
+**Backwards compat** — silent-video path (no narration) is unchanged; the `loudnorm` filter only activates when an audio chain is built (`a_label != None`). No behavior change for V0.2-style silent renders.
+
+**SKILL.md** updated with a V0.3.3 bullet under Supported inputs documenting the loudnorm step + the LRA>15 warn semantics.
+
 ## 0.3.2 — 2026-04-30
 
 **Caption wrap fix** — `_wrap_caption()` no longer breaks Latin words mid-letter (refs #1).

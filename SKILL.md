@@ -16,6 +16,7 @@ You orchestrate a short MP4 from user inputs. **You** plan the video; bundled sc
 - 1+ static image files — any format ffmpeg can decode (jpg / png / webp / avif / heic / …)
 - Aspect ratio: `16:9` (horizontal 1920×1080) or `9:16` (vertical 1080×1920). Default `16:9` if user does not specify.
 - **Narration audio (V0.3)** — 1 audio file per scene (mp3 / wav / m4a — anything ffmpeg can decode). Pass via `--narration s1.mp3,s2.mp3,...` (comma list, length must equal scenes) or per-scene `narration_path` in plan. Each clip is padded with silence (`apad`) or trimmed (`atrim`) to the scene's exact visual occupy duration; scenes are hard-concatenated (no audio crossfade — relevant for educational / explainer style where adjacent scenes are different sentences). Output mp4 is `h264 + aac 192k`.
+- **Loudness normalization (V0.3.3)** — when narration is supplied, the audio chain ends with single-pass `loudnorm=I=-14:LRA=11:TP=-1` so the rendered mp4 lands at the TikTok / YouTube Shorts target of −14 LUFS. Inlined into the filter_complex audio output (NOT `-af`, which ffmpeg rejects on streams produced by complex filtering). If the input narration's loudness range exceeds 15 LU (e.g. silent-narration vs loud-BGM interleaving — `toothbrush-monsters` was 18.20 LU), the renderer emits a stderr warning recommending per-segment leveling upstream; it does NOT auto-upgrade to two-pass loudnorm (preserves render time).
 
 **Motion**
 - Per-scene Ken Burns zoom/pan: `in` (default subtle zoom-in), `out`, `left`, `right`, `none` (no motion).

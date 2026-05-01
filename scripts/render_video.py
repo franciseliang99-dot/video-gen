@@ -181,7 +181,16 @@ def _build_filter_complex(plan: VideoPlan, n_audio: int = 0) -> tuple[str, str, 
                 f"atrim=duration={occupy:.4f}[a{i}]"
             )
         concat_audio = "".join(f"[a{i}]" for i in range(n))
-        parts.append(f"{concat_audio}concat=n={n}:v=0:a=1[aout]")
+        # V0.3.3 (refs #2): single-pass loudnorm to TikTok / Shorts target.
+        # Inlined into filter_complex (NOT -af) because ffmpeg rejects mixing
+        # simple and complex filtering on the same stream:
+        #   "Simple and complex filtering cannot be used together for the same stream."
+        # print_format=summary lets render() parse Input LRA after the run for
+        # high-dynamic-range warnings (the toothbrush LRA=18.20 case from issue #2).
+        parts.append(
+            f"{concat_audio}concat=n={n}:v=0:a=1,"
+            f"loudnorm=I=-14:LRA=11:TP=-1:print_format=summary[aout]"
+        )
         a_out = "[aout]"
 
     return ";".join(parts), v_out, a_out
@@ -220,6 +229,8 @@ def render(
             "-map", v_label,
         ]
         if a_label:
+            # loudnorm is inlined into filter_complex above (see _build_filter_complex);
+            # we only need to map+encode here.
             cmd += ["-map", a_label, "-c:a", "aac", "-b:a", "192k"]
         cmd += [
             "-r", str(plan.fps),
@@ -229,7 +240,20 @@ def render(
             "-pix_fmt", "yuv420p",
             str(out_path),
         ]
-        subprocess.run(cmd, check=True)
+        if a_label:
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            sys.stderr.write(result.stderr)
+            m = re.search(r"Input LRA:\s+(-?[\d.]+)\s*LU", result.stderr)
+            if m and float(m.group(1)) > 15.0:
+                print(
+                    f"warning: input LRA {float(m.group(1)):.2f} LU exceeds 15; "
+                    "single-pass loudnorm may leave residual segment-level "
+                    "imbalance (e.g. silent narration vs loud BGM interleaving) — "
+                    "consider per-segment leveling upstream",
+                    file=sys.stderr,
+                )
+        else:
+            subprocess.run(cmd, check=True)
     return out_path
 
 
